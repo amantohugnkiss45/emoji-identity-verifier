@@ -2,7 +2,16 @@ import streamlit as st
 import hashlib
 import time
 
-# --- Configuration ---
+# --- 1. GLOBAL SERVER MEMORY ---
+# This function creates a shared object in the server's RAM.
+# All users visiting your URL will share this same counter.
+@st.cache_resource
+def get_global_ticker():
+    return {"count": 0}
+
+ticker = get_global_ticker()
+
+# --- 2. CONFIGURATION ---
 EMOJI_POOL = ["😀(grinning-face)",
 "😃(grinning-face-with-big-eyes)",
 "😄(grinning-face-with-smiling-eyes)",
@@ -98,47 +107,62 @@ EMOJI_POOL = ["😀(grinning-face)",
 "🍟(french-fries)",
 "🍣(sushi)",
 "🍦(soft-serve)"]
-INTERVAL = 300 # 5 Minutes
+INTERVAL = 300  # 5 Minutes
 
-st.set_page_config(page_title="Emoji Sync Pro", page_icon="🛡️")
+st.set_page_config(page_title="Emoji Identity Sync", page_icon="🛡️")
 
-st.title("🛡️ Secure Emoji Sync")
-st.info("To sync two devices, ensure both enter the same Room Name and ID.")
+st.title("🛡️ Secure Emoji Identity Sync")
+st.write("A decentralized way to verify identity using timed emoji sequences.")
 
-# --- Private Session Inputs ---
+# --- 3. INPUTS ---
 col1, col2 = st.columns(2)
 with col1:
-    room_name = st.text_input("Private Room Name", value="Session-1", help="Both devices must use the same room name.")
+    room_name = st.text_input("Private Room Name", value="General", help="Both devices must match.")
 with col2:
     ssn_input = st.text_input("Enter ID Number", type="password", placeholder="000-00-0000")
 
+# --- 4. LOGIC ---
 if ssn_input and room_name:
-    # 1. Time Calculation
+    # Handle the Global Counter
+    # We use 'session_state' to ensure a refresh doesn't count as a new entry
+    if 'already_counted' not in st.session_state:
+        ticker["count"] += 1
+        st.session_state.already_counted = True
+
+    # Time-based Hash Logic
     current_time = time.time()
     time_block = int(current_time // INTERVAL)
     seconds_remaining = INTERVAL - int(current_time % INTERVAL)
     
-    # 2. Secure Hash with Room Isolation
-    # We pull the SALT from Streamlit Secrets for real security
-    salt = st.secrets.get("SECRET_SALT", "DefaultLocalSalt123")
-    combined = f"{ssn_input.replace('-', '')}{salt}{time_block}{room_name.lower().strip()}"
+    # Secure Hashing (Using a local salt for this version)
+    salt = "LocalSecret2026" 
+    combined = f"{ssn_input}{salt}{time_block}{room_name.lower().strip()}"
     hash_hex = hashlib.sha256(combined.encode()).hexdigest()
     
-    # 3. Generate Triple Sequence
+    # Map Hash to Emojis
     idx1 = int(hash_hex[0:8], 16) % len(EMOJI_POOL)
     idx2 = int(hash_hex[8:16], 16) % len(EMOJI_POOL)
     idx3 = int(hash_hex[16:24], 16) % len(EMOJI_POOL)
-    
-    # --- UI Display ---
+
+    # --- 5. UI DISPLAY ---
     st.divider()
-    st.write(f"### Current Verification Code for Room: `{room_name}`")
+    
+    # Display the Global Ticker
+    st.metric(label="Total Generator Uses (Across All Users)", value=ticker["count"])
+    
+    st.write(f"### Current Identity for Room: `{room_name}`")
     st.title(f"{EMOJI_POOL[idx1]} {EMOJI_POOL[idx2]} {EMOJI_POOL[idx3]}")
     
-    # Progress bar to show time remaining in the current block
+    # Visual Countdown
     progress = seconds_remaining / INTERVAL
-    st.progress(progress, text=f"Rotating in {seconds_remaining // 60}m {seconds_remaining % 60}s")
+    st.progress(progress, text=f"Sequence rotates in {seconds_remaining // 60}m {seconds_remaining % 60}s")
     
-    # Auto-refresh the page
+    # Auto-refresh helper
     time.sleep(1)
     st.rerun()
+
+else:
+    st.warning("Please enter both a Room Name and an ID Number to generate your sequence.")
+    # Show current global count even when idle
+    st.sidebar.metric("Global Usage", ticker["count"])
     
